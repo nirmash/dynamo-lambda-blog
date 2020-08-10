@@ -23,7 +23,7 @@ Below is a brief explanation of what this repo includes:
 ├── README.md                   <-- This instructions file
 ├── dynamo-go                   <-- Source code for a lambda function
 │   ├── main.go                 <-- Lambda function code
-│   └── go.mod                  <-- Dependency
+│   └── go.mod                  <-- Go dependencies file
 └── template.yaml
 ```
 

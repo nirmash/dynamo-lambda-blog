@@ -1,4 +1,4 @@
-# go-sam-app
+# dynamo-lambda-blog
 
 This is a sample template for the dynamo-go Function.
 

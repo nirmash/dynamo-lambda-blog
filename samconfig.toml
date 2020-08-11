@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "dynamo-go"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-135zhihkdzt7i"
+s3_prefix = "dynamo-go"
+region = "us-west-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"

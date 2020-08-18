@@ -25,34 +25,32 @@ func HandleRequest(ctx context.Context, body iEvent) (string, error) {
 	return fmt.Sprintf(body.Id), nil
 }
 
-func SaveToDynamo(msg iEvent) {
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-west-2")},
-	)
-	// Create DynamoDB client
-	svc := dynamodb.New(sess)
+	func SaveToDynamo(msg iEvent) {
+		sess, err := session.NewSession()
+		svc := dynamodb.New(sess)
 
-	av, err := dynamodbattribute.MarshalMap(msg)
+		av, err := dynamodbattribute.MarshalMap(msg)
 
-	if err != nil {
-		fmt.Println("Got error marshalling map:")
-		fmt.Println(err.Error())
-		os.Exit(1)
+		if err != nil {
+			fmt.Println("Got error marshalling map:")
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+
+		input := &dynamodb.PutItemInput{
+			Item:      av,
+			TableName: aws.String(os.Getenv("DYNAMO_TABLE_NAME")),
+		}
+
+		_, err = svc.PutItem(input)
+
+		if err != nil {
+			fmt.Println("Got error calling PutItem:")
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+		fmt.Println("saved to Dynamo " + msg.Id)
 	}
-
-	input := &dynamodb.PutItemInput{
-		Item:      av,
-		TableName: aws.String(os.Getenv("DYNAMO_TABLE_NAME")),
-	}
-
-	_, err = svc.PutItem(input)
-
-	if err != nil {
-		fmt.Println("Got error calling PutItem:")
-		fmt.Println(err.Error())
-		os.Exit(1)
-	}
-}
 
 func main() {
 	lambda.Start(HandleRequest)

@@ -1,16 +1,215 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  dynamo-go
-  
-  Sample SAM Template for dynamo-go
+Description: ElastiCache and DynamoDB example
 
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Parameters:
+  ProjectName:
+    Type: String
+    Default: Redis-Listener-Sample
+
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+
+  ElasticacheInstanceClass:
+    Type: String
+    Default: cache.t3.small
+  
+  EC2KeyName:
+    Type: String
+    Default: nmmashko-kp-two
+
 Globals:
   Function:
-    Timeout: 5
+    Runtime: go1.x
+    Handler: dynamo-go
+    MemorySize: 512
+    Timeout: 15
+    Tags:
+      Project: !Ref ProjectName
+
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: '10.0.0.0/16'
+    Private1:
+      CIDR: '10.0.0.0/24'
+    Private2:
+      CIDR: '10.0.1.0/24'
+    Lambda1:
+      CIDR: '10.0.2.0/24'
+    Lambda2:
+      CIDR: '10.0.3.0/24'
+    Public1:
+      CIDR: '10.0.4.0/24'
 
 Resources:
+  ## EC2 Instance ##
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.medium
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref EC2KeyName
+      Monitoring: true
+      SecurityGroupIds: 
+        - !Ref EC2InstanceSecurityGroup
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-Instance"      
+
+  ## ElastiCache ##
+  RedisClusterParameterGroup:
+    Type: 'AWS::ElastiCache::ParameterGroup'
+    Properties:
+      Description: !Sub "${ProjectName}-parameter-group"
+      CacheParameterGroupFamily: redis5.0
+      Properties:
+        notify-keyspace-events: "EA"
+
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      AutoMinorVersionUpgrade: true
+      ReplicationGroupId: !Sub "${ProjectName}-cluster"
+      # enable Cluster Mode
+      CacheParameterGroupName: !Ref RedisClusterParameterGroup
+      CacheNodeType: cache.t3.medium
+      CacheSubnetGroupName:  !Ref RedisSubnetGroup
+      Engine: redis
+      EngineVersion: 5.0.4
+      NumNodeGroups: 1
+      Port: 6379
+      ReplicasPerNodeGroup: 1
+      ReplicationGroupDescription: !Sub "${ProjectName}-Redis-Replication-Group"
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Redis subnet group
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Enable Redis access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref EC2InstanceSecurityGroup
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ## VPC ##
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: !FindInMap ['SubnetConfig', 'VPC', 'CIDR']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EC2InstanceInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: name
+        Value: !Sub "${ProjectName}-ig"
+  
+  EC2InstanceAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: EC2InstanceInternetGateway
+  
+  EC2InstanceRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${ProjectName}-rt"
+  
+  EC2InstanceRouteTableRoute:
+    Type: AWS::EC2::Route
+    DependsOn: EC2InstanceAttachGateway
+    Properties:
+      RouteTableId:
+        Ref: EC2InstanceRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: EC2InstanceInternetGateway
+          
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region      
+      CidrBlock: !FindInMap ['SubnetConfig', 'Public1', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-subnet-1"
+        - Key: Project
+          Value: !Ref ProjectName
+      VpcId: !Ref VPC
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref EC2InstanceRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock:  !FindInMap ['SubnetConfig', 'Private1', 'CIDR']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-subnet-1"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock:  !FindInMap ['SubnetConfig', 'Private2', 'CIDR']
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-subnet-2"
+        - Key: Project
+          Value: !Ref ProjectName
+  
   DynamoGo:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
@@ -23,6 +222,7 @@ Resources:
       Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
         Variables:
           DYNAMO_TABLE_NAME: !Ref RedisDataTable
+  
   RedisDataTable:
     Type: AWS::DynamoDB::Table
     Properties: 
@@ -34,14 +234,36 @@ Resources:
           KeyType: HASH
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
-        WriteCapacityUnits: 5          
+        WriteCapacityUnits: 5
+
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: EC2 Security Group
+      SecurityGroupIngress:
+         - IpProtocol: tcp
+           CidrIp: 0.0.0.0/0
+           FromPort: 22
+           ToPort: 22      
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName    
+
 Outputs:
+  # Need to do the outputs
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  EC2Instance:
+    Description: "EC2 Instance ARN"
+    Value: !GetAtt EC2Instance.PublicIp
+  # RedisCluster:
+  #   Description: "Redis Cluster Primary Endpoing"
+  #   Value: !GetAtt PrimaryEndpoint
   DynamoGo:
-    Description: "First Lambda Function ARN"
+    Description: "Lambda Function ARN"
     Value: !GetAtt DynamoGo.Arn
-  DynamoGoIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt DynamoGoRole.Arn
+  RedisDataTable:
+    Description: "Redis Dynamo Data Table ARN"
+    Value: !GetAtt RedisDataTable.Arn

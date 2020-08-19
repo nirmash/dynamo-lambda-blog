@@ -57,7 +57,7 @@ Resources:
       SubnetId: !Ref PublicSubnet1
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-Instance"      
+          Value: !Sub "${ProjectName}-Instance"    
 
   ## ElastiCache ##
   RedisClusterParameterGroup:
@@ -78,7 +78,7 @@ Resources:
       CacheNodeType: cache.t3.medium
       CacheSubnetGroupName:  !Ref RedisSubnetGroup
       Engine: redis
-      EngineVersion: 5.0.4
+      EngineVersion: 5.0.6
       NumNodeGroups: 1
       Port: 6379
       ReplicasPerNodeGroup: 1
@@ -256,14 +256,8 @@ Outputs:
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   EC2Instance:
-    Description: "EC2 Instance ARN"
-    Value: !GetAtt EC2Instance.PublicIp
-  # RedisCluster:
-  #   Description: "Redis Cluster Primary Endpoing"
-  #   Value: !GetAtt PrimaryEndpoint
-  DynamoGo:
-    Description: "Lambda Function ARN"
-    Value: !GetAtt DynamoGo.Arn
-  RedisDataTable:
-    Description: "Redis Dynamo Data Table ARN"
-    Value: !GetAtt RedisDataTable.Arn
+    Description: "ElastiCache Instance URL"
+    Value: !GetAtt EC2Instance.PublicDnsName
+  RedisCluster:
+    Description: "Redis Cluster Primary Endpoint"
+    Value: !GetAtt RedisCluster.PrimaryEndPoint.Address

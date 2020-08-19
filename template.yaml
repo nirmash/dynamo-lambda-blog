@@ -261,3 +261,9 @@ Outputs:
   RedisCluster:
     Description: "Redis Cluster Primary Endpoint"
     Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+  DynamoGo:
+    Description: "ARN of Lambda Function"
+    Value: !GetAtt DynamoGo.Arn
+  RedisDataTable:
+    Description: "Name of the DynamoDB destination table"
+    Value: !Ref RedisDataTable
